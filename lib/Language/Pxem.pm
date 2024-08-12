@@ -8,7 +8,9 @@ our @ISA = qw();
 
 our $VERSION = '0.01';
 
-sub compile {
+# index 2*n is literal data, index 2*n+1 is command.
+# This is token analyzer.
+sub lex {
   my $src = shift;
   my @compiled;
 

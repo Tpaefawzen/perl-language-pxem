@@ -3,6 +3,7 @@ package Language::Pxem;
 use 5.038002;
 use strict;
 use warnings;
+use Carp;
 
 our @ISA = qw();
 
@@ -19,6 +20,7 @@ sub lex {
       my $literal = $1;
       my $cmd = $2;
       $cmd =~ tr/A-Z/a-z/;
+      $cmd = token2sub($cmd);
       push @compiled, $literal, $cmd;
     } else {
       push @compiled, $src;
@@ -28,6 +30,18 @@ sub lex {
   }
 
   @compiled;
+}
+
+# Given lexed array, convert into list of subroutines.
+sub yacc {
+  my $lexes = shift;
+
+}
+
+sub token2sub {
+  my $tok = shift;
+
+  $cmds{$tok} or confess "no such command: ${tok}";
 }
 
 # Preloaded methods go here.

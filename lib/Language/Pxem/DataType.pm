@@ -19,7 +19,7 @@ sub stack {
   defined wantarray or return;
 
   my $self = shift;
-  wantarray ? @{ $self->{stack} } : $self->{stack};
+  @{ $self->{stack} };
 }
 
 # I/O are out of this scope!

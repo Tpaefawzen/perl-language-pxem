@@ -22,13 +22,46 @@ sub stack {
   @{ $self->{stack} };
 }
 
-# I/O are out of this scope!
-sub cmd_p { ... }
-sub cmd_o { ... }
-sub cmd_n { ... }
-sub cmd_i { ... }
-sub cmd__ { ... }
+# I/O
+# depends on __putc, __putn, __getc, __getn
+sub cmd_p {
+  my $self = shift;
+  $self->cmd_o while ( $self->stack );
+}
 
+sub cmd_o {
+  my $self = shift;
+  my $x = $self->cmd_s;
+  $self->__putc($x) if defined $x;
+}
+
+sub cmd_n {
+  my $self = shift;
+  my $x = $self->cmd_s;
+  $self->__putn($x) if defined $x;
+}
+
+sub cmd_i {
+  my $self = shift;
+  my $x = $self->getc;
+  $self->__getc($self->stack, $x);
+}
+
+sub cmd__ {
+  my $self = shift;
+  my $x = $self->getn;
+  $self->__getn($self->stack, $x);
+}
+
+# I/O deps, must be implemented
+# __getc, __getn accept an integer but doesn't need to care for undef.
+# __putc, __putn accept nothing and return an integer.
+sub __getc { ... }
+sub __getn { ... }
+sub __putc { ... }
+sub __putn { ... }
+
+# Stack operation
 sub cmd_c {
   my $self = shift;
   my $stack = $self->{stack};

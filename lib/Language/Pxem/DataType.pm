@@ -5,6 +5,7 @@ use warnings;
 
 use Carp;
 
+# Constructor
 sub new {
   my $cls = shift;
 
@@ -55,7 +56,7 @@ sub cmd__ {
 
 # I/O deps, must be implemented
 # __getc, __getn accept an integer but doesn't need to care for undef.
-# __putc, __putn accept nothing and return an integer.
+# __putc, __putn accept nothing and return an integer so cmd_i and cmd__ pushes the value.
 sub __getc { ... }
 sub __getn { ... }
 sub __putc { ... }
@@ -70,6 +71,7 @@ sub cmd_c {
   }
 }
 
+# May return a value unless empty
 sub cmd_s {
   my $self = shift;
   pop @{ $self->{stack} };
@@ -83,19 +85,76 @@ sub cmd_v {
 # How do I get my file content?
 sub cmd_f { ... }
 
-# I know it should be forked but really?
-sub cmd_e { ... }
+# process fork
+sub cmd_e {
+  my $self = shift;
+  my $new = (ref $self)->new;
+  @{ $new->{stack} } = $self->stack;
+  return $new;
+}
 
 # How do I get random function, on-negative handler?
-sub cmd_r { ... }
+sub cmd_r {
+  my $self = shift;
+  my $x = $self->cmd_s;
+  push @{ $self->{stack} }, $self->__rand($x) if defined $x;
+}
 
-# idk for loops
-sub cmd_w { ... }
-sub cmd_x { ... }
-sub cmd_y { ... }
-sub cmd_z { ... }
+# Must obtain an integer to return another integer.
+sub __rand {
+  my ($self, $x) = @_;
+  return rand($x);
+}
+
+# Loop beginners. Return true if must enter loop, false if must break loop.
+sub cmd_w {
+  my $self = shift;
+  my $x = $self->cmd_s;
+  defined $x or return $self->__empty_handler, "w";
+  return $x != 0;
+}
+
+sub cmd_x {
+  my $self = shift;
+  $self->__compare, "x";
+}
+
+sub cmd_y {
+  my $self = shift;
+  $self->__compare, "y";
+}
+
+sub cmd_z {
+  my $self = shift;
+  $self->__compare, "z";
+}
+
+# Two values comparison for loop
+sub __compare {
+  my ($self, $cond) = @_;
+  return $self->__empty_handler, $cond if $self->stack < 2;
+
+  my $x = $self->cmd_s;
+  my $y = $self->cmd_s;
+
+  my %cond = (
+    x => sub { $_[0] < $_[1] },
+    y => sub { $_[0] > $_[1] },
+    z => sub { $_[0] == $_[1] },
+  );
+  return $cond{$cond}->($x, $y);
+}
+
+# Must return bool.
+sub __empty_handler {
+  my ($self, $cond) = @_;
+  1; # As in pxemi or RPxem
+}
+
+# Loop ender.
 sub cmd_a { } # obviously nop
 
+# Register operation.
 sub cmd_t {
   my $self = shift;
   my $val = pop @{ $self->{stack} };
@@ -108,10 +167,74 @@ sub cmd_m {
   push @{ $self->{stack} }, $val if defined $val;
 }
 
+# Nothing to do.
+sub cmd_d {} # Nothing. Stack concat can be done by C<push @{ $self->{stack} }, $other->stack>
+
+# Arithmetic operations.
+# Subroutine names cannot have symbol name, so usage: $pxem->opr("+"), $cmd->opr("!") or so
+sub opr {
+  my ($self, $opr) = @_;
+
+  # Empty is NOP!
+  return if $self->stack < 2;
+
+  my $x = $self->cmd_s;
+  my $y = $self->cmd_s;
+
+  # Some operators need $x >= $y so $x - $y or $x / $y or $x % $y.
+  my $needCmp = $opr == '-' || $opr == '$' || $opr == '%';
+  ($y, $x) = sort { $self->__arith_cmp } $x, $y if $needCmp; # NOTE accending order so 1,2 not 2,1
+
+  # Exceptional behavior
+  $self->__handle_zerodiv($opr, $x, $y) and return;
+  $self->__handle_overflow($opr, $x, $y) and return;
+  $self->__handle_underflow($opr, $x, $y) and return;
+
+  # Finally
+  my %oprs = (
+    '+' => sub { $_[0] + $_[1] },
+    '-' => sub { $_[0] - $_[1] },
+    '!' => sub { $_[0] * $_[1] },
+    '$' => sub { int($_[0] / $_[1]) },
+    '%' => sub { $_[0] % $_[1] },
+  );
+
+  my $result = $oprs{$opr}->($x, $y);
+  push @{ $self->{stack} }, $result
+}
+
+# <=> thing for sort
+sub __arith_cmp {
+  $a <=> $b;
+}
+
+# For arithmetic operations.
+# These do something if any.
+# my ($self, $opr, $x, $y) = @_;
+# Must return true if and only if has handled.
+sub __handle_zerodiv { undef }
+sub __handle_overflow { undef }
+sub __handle_underflow { undef }
+
 # Stack operation
+# Concatenated as is.
 sub Push {
   my $self = shift;
   push @{ $self->{stack} }, @_;
+}
+
+# Literal push; order reversed.
+
+# List of integers.
+sub push_literal_n {
+  my $self = shift;
+  push @{ $self->{stack} }, reverse @_;
+}
+
+# A string.
+sub push_literal_s {
+  my ($self, $str) = @_;
+  ...
 }
 
 1;
@@ -120,7 +243,7 @@ sub Push {
 
 =head1 NAME
 
-Language::Perl::DataType - Pxem data structure
+Language::Perl::DataType - Pxem data structure: stack and nullable register
 
 =head1 SYNOPSIS
 
@@ -129,5 +252,12 @@ TODO
 =head1 DESCRIPTION
 
 A stack and a nullable register.
+
+For each Pxem command C<.x> where C<x> is the character, implements method C<cmd_x> in lowercase.
+Arithmetic operators are implemented as method C<opr> who accepts the command name as first argument.
+
+=head1 CONSTRUCTORS
+
+
 
 =cut

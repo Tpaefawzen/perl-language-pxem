@@ -42,14 +42,14 @@ sub cmd_n {
 
 sub cmd_i {
   my $self = shift;
-  my $x = $self->getc;
-  $self->__getc($self->stack, $x);
+  my $x = $self->__getc;
+  push @{ $self->{stack} }, $x;
 }
 
 sub cmd__ {
   my $self = shift;
-  my $x = $self->getn;
-  $self->__getn($self->stack, $x);
+  my $x = $self->__getn;
+  push @{ $self->{stack} }, $x;
 }
 
 # I/O deps, must be implemented

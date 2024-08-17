@@ -168,7 +168,7 @@ sub cmd_m {
 }
 
 # Nothing to do.
-sub cmd_d {} # Nothing. Stack concat can be done by C<push @{ $self->{stack} }, $other->stack>
+sub cmd_d {} # Nothing. Stack concat can be done by C<<push @{ $self->{stack} }, $other->stack>>
 
 # Arithmetic operations.
 # Subroutine names cannot have symbol name, so usage: $pxem->opr("+"), $cmd->opr("!") or so
@@ -256,8 +256,128 @@ A stack and a nullable register.
 For each Pxem command C<.x> where C<x> is the character, implements method C<cmd_x> in lowercase.
 Arithmetic operators are implemented as method C<opr> who accepts the command name as first argument.
 
+=head1 MEMBERS
+
+=over
+
+=item C<{stack}>
+
+An array of integers.
+
+=item C<{register}>
+
+C<undef> or an integer.
+
+=back
+
+=head1 MEMBER ACCESORS
+
+=over
+
+=item C<stack($self)>
+
+Return C<<@{ $self->{stack} }>>.
+
+=back
+
 =head1 CONSTRUCTORS
 
+=over
 
+=item C<new($cls)>
+
+Create a pair of an empty stack and an empty register.
+
+=item C<cmd_e($self)>
+
+Create and return a fork of C<$self>; the C<{stack}> is inherieted but the C<{register}> is C<undef>.
+
+=back
+
+=head1 METHODS
+
+Modules with name starting with two underscores C<__> are considered to be overloadable methods that you should customize.
+
+Modules with name starting with C<cmd_> are as in Pxem command lowercase except C<+>, C<->, C<!>, C<$>, C<%>;
+these five methods are implemented as C<opr> method.
+
+=head2 Pxem commands
+
+=over
+
+=item C<cmd_p($self)>, C<cmd_o($self)>, C<cmd_n($self)>
+
+Output commands.
+C<cmd_p> outputs every item in the stack as characters.
+C<cmd_o> and C<cmd_n> outputs top item of the stack as a character and a number respectively if any.
+
+Depends on C<__putc>, C<__putn>.
+
+=item C<cmd_i($self)>, C<cmd__($self)>
+
+Input commands.
+Get a character or a number respectively to push onto the stack.
+
+Depends on C<__getc>, C<__getn>.
+
+=item C<cmd_c($self)>
+
+Duplicate top item of the stack if any.
+
+=item C<cmd_s($self)>
+
+Pop an item from the stack and return it if any.
+
+On the Pxem language the command just discards the top value if any.
+
+=item C<cmd_v($self)>
+
+Reverse the order of the stack.
+
+=item C<cmd_f($self)>
+
+Push content of the stack as literal.
+B<This method is unimplemented to leave the task to define the content of the file to the inherented package.>
+
+=item C<cmd_e($self)>
+
+See "CONSTRUCTORS".
+
+=item C<cmd_r($self)>
+
+Pop a value if any. If so, get a random integer from 0 up to the value (exclusive).
+
+Depends on C<__rand>.
+
+=item C<cmd_w($self)>, C<cmd_x($self)>, C<cmd_y($self)>, C<cmd_z($self)>
+
+Pop one or two values from the stack if any.
+Return a boolean value to indicate whether the program counter should enter the loop.
+These commands construct the beginning of the loop.
+
+C<cmd_w> pops one value to test whether it is NOT zero.
+
+Other three methods pop two values to test comparison as in C<__compare>.
+
+Depends on C<__empty_handler>, C<__compare>.
+
+=item C<cmd_a($self)>
+
+Do nothing; this command indicates end of loop but the task to handle the loop is left to
+the child of this package.
+
+=item C<cmd_t($self)>
+
+Pop a value if any. If so, store the value to the register.
+
+=item C<cmd_m($self)>
+
+Push a value in the register unless empty.
+
+=item C<cmd_d($self)>
+
+Do nothing; this command indicates to return from the subroutine so 
+
+=back
 
 =cut

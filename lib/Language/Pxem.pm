@@ -41,7 +41,20 @@ sub yacc {
 sub token2sub {
   my $tok = shift;
 
-  $cmds{$tok} or confess "no such command: ${tok}";
+  $tok =~ m/[poni_csvferwxyzatmd]/ and
+    return sub {
+      my $self = shift;
+      my $method = "cmd_$tok";
+      return $self->$method(@_);
+    };
+
+  $tok =~ m/[+-!$%]/ and
+    return sub {
+      my $self = shift;
+      return $self->opr($tok, @_);
+    };
+
+  confess "no such Pxem command: $tok";
 }
 
 # Preloaded methods go here.

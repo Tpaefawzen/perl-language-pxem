@@ -17,8 +17,6 @@ sub new {
 
 # member getter/setter
 sub stack {
-  defined wantarray or return;
-
   my $self = shift;
   @{ $self->{stack} };
 }

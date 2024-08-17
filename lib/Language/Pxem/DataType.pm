@@ -94,6 +94,8 @@ sub cmd_e {
 # How do I get random function, on-negative handler?
 sub cmd_r {
   my $self = shift;
+  $self->__srand unless $self->{has_done_srand};
+  $self->{has_done_srand} = 1;
   my $x = $self->cmd_s;
   push @{ $self->{stack} }, $self->__rand($x) if defined $x;
 }
@@ -102,6 +104,10 @@ sub cmd_r {
 sub __rand {
   my ($self, $x) = @_;
   return rand($x);
+}
+
+sub __srand {
+  srand();
 }
 
 # Loop beginners. Return true if must enter loop, false if must break loop.
@@ -173,32 +179,46 @@ sub cmd_d {} # Nothing. Stack concat can be done by C<<push @{ $self->{stack} },
 sub opr {
   my ($self, $opr) = @_;
 
-  # Empty is NOP!
   return if $self->stack < 2;
 
-  my $x = $self->cmd_s;
-  my $y = $self->cmd_s;
-
-  # Some operators need $x >= $y so $x - $y or $x / $y or $x % $y.
-  my $needCmp = $opr == '-' || $opr == '$' || $opr == '%';
-  ($y, $x) = sort { $self->__arith_cmp } $x, $y if $needCmp; # NOTE accending order so 1,2 not 2,1
-
-  # Exceptional behavior
-  $self->__handle_zerodiv($opr, $x, $y) and return;
-  $self->__handle_overflow($opr, $x, $y) and return;
-  $self->__handle_underflow($opr, $x, $y) and return;
-
-  # Finally
-  my %oprs = (
-    '+' => sub { $_[0] + $_[1] },
-    '-' => sub { $_[0] - $_[1] },
-    '!' => sub { $_[0] * $_[1] },
-    '$' => sub { int($_[0] / $_[1]) },
-    '%' => sub { $_[0] % $_[1] },
+  my %cmds = qw(
+    + __add
+    - __sub
+    ! __mul
+    $ __div
+    % __mod
   );
+  my $cmd = $cmds{$opr};
+  $self->$cmd;
+}
 
-  my $result = $oprs{$opr}->($x, $y);
-  push @{ $self->{stack} }, $result
+sub __add {
+  my $self = shift;
+  $self->Push($self->cmd_s() + $self->cmd_s());
+}
+
+sub __sub {
+  my $self = shift;
+  $self->Push(abs($self->cmd_s() - $self->cmd_s()));
+}
+
+sub __mul {
+  my $self = shift;
+  $self->Push($self->cmd_s() * $self->cmd_s());
+}
+
+sub __div {
+  my $self = shift;
+  my ($y, $x) = sort { $self->__arith_cmp } $self->cmd_s(), $self-cmd_s();
+  $self->__handle_zerodiv('$', $x, $y);
+  $self->Push($x % $y);
+}
+
+sub __mod {
+  my $self = shift;
+  my ($y, $x) = sort { $self->__arith_cmp } $self->cmd_s(), $self-cmd_s();
+  $self->__handle_zerodiv('%', $x, $y);
+  $self->Push(int($x / $y));
 }
 
 # <=> thing for sort

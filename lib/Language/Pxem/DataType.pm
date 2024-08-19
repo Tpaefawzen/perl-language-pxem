@@ -53,12 +53,12 @@ sub cmd__ {
 }
 
 # I/O deps, must be implemented
-# __getc, __getn accept an integer but doesn't need to care for undef.
-# __putc, __putn accept nothing and return an integer so cmd_i and cmd__ pushes the value.
-sub __getc { ... }
-sub __getn { ... }
+# __putc, __putn accept an integer but doesn't need to care for undef.
+# __getc, __getn accept nothing and return an integer so cmd_i and cmd__ pushes the value.
 sub __putc { ... }
 sub __putn { ... }
+sub __getc { ... }
+sub __getn { ... }
 
 # Stack operation
 sub cmd_c {
@@ -103,7 +103,7 @@ sub cmd_r {
 # Must obtain an integer to return another integer.
 sub __rand {
   my ($self, $x) = @_;
-  return rand($x);
+  return int(rand($x));
 }
 
 sub __srand {
@@ -257,22 +257,37 @@ sub push_literal_s {
 
 1;
 
+__END__
+
 =pod
 
 =head1 NAME
 
-Language::Perl::DataType - Pxem data structure: stack and nullable register
+Language::Pxem::DataType - Pxem data structure: stack and nullable register
 
 =head1 SYNOPSIS
 
-TODO
+    use Language::Pxem::DataType;
+
+    my $storage = Language::Pxem::DataType->new;
+    $storage->Push(1,2,3,4,5,6,7,8,9);
+
+    for ( qw/ p o n i _ c s v f e r w x y z a t m d / ) {
+        my $method_name = "cmd_$_";
+        $return = $storage->$method_name;
+    }
+
+    for ( qw/ + - ! $ % / ) {
+        $storage->opr($_);
+    }
 
 =head1 DESCRIPTION
 
 A stack and a nullable register.
 
-For each Pxem command C<.x> where C<x> is the character, implements method C<cmd_x> in lowercase.
-Arithmetic operators are implemented as method C<opr> who accepts the command name as first argument.
+For each Pxem command C<.x> where C<x> is the lowercase character, method C<cmd_x> is implemented.
+Arithmetic operating commands such as C<.+>, C<.$> are implemented as a method C<opr>;
+it accepts a command character for first argument.
 
 =head1 MEMBERS
 
@@ -294,6 +309,8 @@ C<undef> or an integer.
 
 =item C<stack($self)>
 
+    my @current_stack = $self->stack;
+
 Return C<<@{ $self->{stack} }>>.
 
 =back
@@ -304,11 +321,15 @@ Return C<<@{ $self->{stack} }>>.
 
 =item C<new($cls)>
 
+    my $storage = Language::Pxem::DataType->new;
+
 Create a pair of an empty stack and an empty register.
 
 =item C<cmd_e($self)>
 
-Create and return a fork of C<$self>; the C<{stack}> is inherieted but the C<{register}> is C<undef>.
+    my $forked = $self->cmd_e;
+
+Create and return a fork of C<$self>; the C<{stack}> is inherieted from C<$self> but the C<{register}> is C<undef>.
 
 =back
 
@@ -325,24 +346,106 @@ these five methods are implemented as C<opr> method.
 
 =item C<cmd_p($self)>, C<cmd_o($self)>, C<cmd_n($self)>
 
+    $self->cmd_p; # Ditto for cmd_o, cmd_n
+
 Output commands.
-C<cmd_p> outputs every item in the stack as characters.
+C<cmd_p> outputs every item in the stack as characters to standard output.
+After that the stack is empty.
 C<cmd_o> and C<cmd_n> outputs top item of the stack as a character and a number respectively if any.
 
 Depends on C<__putc>, C<__putn>.
 
+=over
+
+=item C<__putc($self, $integer)>
+
+=item C<__putn($self, $integer)>
+
+    package MyPxem;
+    use parent qw(Language::Pxem::DataType);
+
+    sub __putc {
+        my ($self, $integer) = @_;
+        print $self->{fout} chr($integer);
+    }
+
+    sub __putn {
+        my ($self, $integer) = @_;
+        print $self->{fout} $integer;
+    }
+    
+    package main;
+    my $self = MyPxem->new;
+    $self->__putc($integer);
+    $self->__putn($integer);
+
+C<__putc> and C<__putn> are unimplemented by default.
+They shall take an C<$integer> value to output a character with
+such codepoint and a decimal integer representation of the value
+to the I<standard output> respectively. 
+
+Error-handling is implementation defined.
+
+=back
+
 =item C<cmd_i($self)>, C<cmd__($self)>
 
+    $self->cmd_i; # Ditto for cmd__
+
 Input commands.
-Get a character or a number respectively to push onto the stack.
+Get a character or a number from standard input respectively to push onto the stack.
 
 Depends on C<__getc>, C<__getn>.
 
+=over
+
+=item C<__getc($self)>, C<__getn($self)>
+
+    package MyPxem;
+    use parent qw(Language::Pxem::DataType);
+    
+    sub __getc {
+        my $self = shift;
+        if ( defined (my $c = $self->{ungetbuf}) ) {
+            $self->{ungetbuf} = undef;
+            return $c;
+        }
+        return ord getc $self->{fin} or -1;
+    }
+
+    sub __getn {
+        my $self = shift;
+        ...; # Implement to take $1 from /^\s([+-]?[0-9]+)/ from $self->{fin}
+    }
+
+    package main;
+    my $self = MyPxem->new;
+    my $integer = $self->__getc;
+    my $integer = $self->__getn;
+
+Unimplemented by default.
+They shall take no arguments to return an integer, not a character of string.
+C<__getc> shall read a character from the I<standard input> to return its codepoint value.
+If failed, -1 shall be returned.
+C<__getn> shall do what C<scanf("%d", &n)> in the C language does to return the integer value C<n>;
+it is implementation-defined in case it failed.
+
+=back
+
 =item C<cmd_c($self)>
+
+    $self->cmd_c;
 
 Duplicate top item of the stack if any.
 
 =item C<cmd_s($self)>
+
+    my $value = $self->cmd_s;
+    unless ( defined $value ) {
+        # Do something when stack is empty
+    } else {
+        # Do something when popped something
+    }
 
 Pop an item from the stack and return it if any.
 
@@ -350,25 +453,68 @@ On the Pxem language the command just discards the top value if any.
 
 =item C<cmd_v($self)>
 
+    $self->cmd_v;
+
 Reverse the order of the stack.
 
 =item C<cmd_f($self)>
+
+    $self->cmd_f;
 
 Push content of the stack as literal.
 B<This method is unimplemented to leave the task to define the content of the file to the inherented package.>
 
 =item C<cmd_e($self)>
 
+    my $forked = $self->cmd_e;
+
 See "CONSTRUCTORS".
 
 =item C<cmd_r($self)>
 
+    $self->cmd_r;
+
+Random value obtainer.
 Pop a value if any. If so, get a random integer from 0 up to the value (exclusive).
 
-Depends on C<__rand>.
+Depends on C<__srand>, C<__rand>.
+
+=over
+
+=item C<__srand($self)>
+
+    $self->__srand;
+
+This method shall set initial statement for C<__rand> method.
+Shall be called only once if.
+
+=item C<__rand($self, $upto)>
+
+    my $int = $self->__rand($self, $upto);
+
+Given a positive integer C<$upto>, C<__rand> shall return an integer randomly chosen from 0 to C<$upto>,
+excluding C<$upto>.
+Unspecified for non-positive integer C<$upto>, but I think you can extend this method so
+it can accept non-negative integer so it returns a negative integer.
+For example:
+
+    package MyPxem;
+    use parent qw(Language::Pxem::DataType);
+
+    sub __rand {
+        my ($self, $upto) = @_;
+        my $sign = $upto < 0 ? -1 : 1;
+        $upto *= -1 if $upto < 0;
+        $sign * $self->SUPER::__rand($upto);
+    }
+
+=back
 
 =item C<cmd_w($self)>, C<cmd_x($self)>, C<cmd_y($self)>, C<cmd_z($self)>
 
+    my $bool = $self->cmd_w; # Ditto for cmd_x, cmd_y, cmd_z
+
+Loop beginners.
 Pop one or two values from the stack if any.
 Return a boolean value to indicate whether the program counter should enter the loop.
 These commands construct the beginning of the loop.
@@ -386,15 +532,32 @@ the child of this package.
 
 =item C<cmd_t($self)>
 
+    $self->cmd_t;
+
 Pop a value if any. If so, store the value to the register.
 
 =item C<cmd_m($self)>
+
+    $self->cmd_m;
 
 Push a value in the register unless empty.
 
 =item C<cmd_d($self)>
 
+    $self->cmd_d;
+
 Do nothing; this command indicates to return from the subroutine so 
+
+=item C<opr($self, $chr)>
+
+    $self->opr("+"); # one of q/ + - ! $ % /
+
+Arithmetic operation to the stack.
+If the stack has less than two items do nothing.
+Else do arithmetic operation; pop top two items as arithmetic operands,
+then push the arithmetic result.
+
+Depends on C<__add>, C<__sub>, C<__mul>, C<__div>, C<__mod>.
 
 =back
 

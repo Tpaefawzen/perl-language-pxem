@@ -103,7 +103,7 @@ sub cmd_r {
 # Must obtain an integer to return another integer.
 sub __rand {
   my ($self, $x) = @_;
-  return int(rand($x));
+  return $self->__int(rand($x));
 }
 
 sub __srand {
@@ -114,7 +114,7 @@ sub __srand {
 sub cmd_w {
   my $self = shift;
   my $x = $self->cmd_s;
-  defined $x or return $self->__empty_handler, "w";
+  defined $x or return $self->__empty_handler("w");
   return $x != 0;
 }
 
@@ -136,17 +136,17 @@ sub cmd_z {
 # Two values comparison for loop
 sub __compare {
   my ($self, $cond) = @_;
-  return $self->__empty_handler, $cond if $self->stack < 2;
+  return $self->__empty_handler($cond) if $self->stack < 2;
 
   my $x = $self->cmd_s;
   my $y = $self->cmd_s;
 
   my %cond = (
-    x => sub { $_[0] < $_[1] },
-    y => sub { $_[0] > $_[1] },
-    z => sub { $_[0] == $_[1] },
+    x => $x < $y,
+    y => $x > $y,
+    z => $x != $y,
   );
-  return $cond{$cond}->($x, $y);
+  return $cond{$cond};
 }
 
 # Must return bool.
@@ -163,7 +163,10 @@ sub cmd_t {
   my $self = shift;
   my $val = pop @{ $self->{stack} };
   $self->{register} = $val if defined $val;
+  $self->__empty_handler_t unless defined $val;
 }
+
+sub __empty_handler_t {}
 
 sub cmd_m {
   my $self = shift;
@@ -218,7 +221,7 @@ sub __mod {
   my $self = shift;
   my ($y, $x) = sort { $self->__arith_cmp } $self->cmd_s(), $self-cmd_s();
   $self->__handle_zerodiv('%', $x, $y);
-  $self->Push(int($x / $y));
+  $self->Push($self->__int($x / $y));
 }
 
 # <=> thing for sort
@@ -234,25 +237,17 @@ sub __handle_zerodiv { undef }
 sub __handle_overflow { undef }
 sub __handle_underflow { undef }
 
+# The way to make an integer.
+sub __int {
+    my ($self, $x) = @_;
+    int($x);
+}
+
 # Stack operation
 # Concatenated as is.
 sub Push {
   my $self = shift;
   push @{ $self->{stack} }, @_;
-}
-
-# Literal push; order reversed.
-
-# List of integers.
-sub push_literal_n {
-  my $self = shift;
-  push @{ $self->{stack} }, reverse @_;
-}
-
-# A string.
-sub push_literal_s {
-  my ($self, $str) = @_;
-  ...
 }
 
 1;
@@ -451,6 +446,10 @@ Pop an item from the stack and return it if any.
 
 On the Pxem language the command just discards the top value if any.
 
+It does:
+
+    pop @{ $self->{stack} };
+
 =item C<cmd_v($self)>
 
     $self->cmd_v;
@@ -461,8 +460,10 @@ Reverse the order of the stack.
 
     $self->cmd_f;
 
-Push content of the stack as literal.
-B<This method is unimplemented to leave the task to define the content of the file to the inherented package.>
+I<Unimplemented by default.>
+Push content of the file as literal data;
+last character is pushed first then second to last, third to last and so on;
+the first character shall be top of the stack.
 
 =item C<cmd_e($self)>
 
@@ -503,8 +504,8 @@ For example:
 
     sub __rand {
         my ($self, $upto) = @_;
-        my $sign = $upto < 0 ? -1 : 1;
-        $upto *= -1 if $upto < 0;
+        my $sign = 1;
+        ($upto, $sign) = (-$upto, -1) if $upto<0;
         $sign * $self->SUPER::__rand($upto);
     }
 
@@ -521,9 +522,29 @@ These commands construct the beginning of the loop.
 
 C<cmd_w> pops one value to test whether it is NOT zero.
 
-Other three methods pop two values to test comparison as in C<__compare>.
+C<cmd_x>, C<cmd_y>, C<cmd_z> pop two values;
+let top value C<$x> and second top value C<$y>;
+C<cmd_x>, C<cmd_y>, and C<cmd_z> return true if
+C<<$x<$y>>, C<<$x>$y>>, C<<$x!=$y>> respectively.
 
-Depends on C<__empty_handler>, C<__compare>.
+If stack is empty when C<cmd_w> is called, or
+if stack has less than two items when other three methods are callled,
+the C<__empty_handler> shall be called with one of C<qw(w x y z)> as first argument
+to the method C<__empty_handler> to indicate which of the four methods C<cmd_w>, C<cmd_x>, C<cmd_y>, C<cmd_z> called the handler;
+the result of C<__empty_handler> is returned as the result of this method.
+
+Depends on C<__empty_handler>.
+
+=over
+
+=item C<__empty_handler($self, $cond)>
+
+    my $bool = $self->__empty_handler("w"); # or "x", "y", "z"
+
+This method shall determine whether the control should transfer inside the looping block
+when the stack has inadequant items to decide the given C<$cond>ition.
+
+=back
 
 =item C<cmd_a($self)>
 
@@ -535,12 +556,25 @@ the child of this package.
     $self->cmd_t;
 
 Pop a value if any. If so, store the value to the register.
+If the stack is empty C<__empty_handler_t> is called.
+
+=over
+
+=item C<__empty_handler_t($self)>
+
+    $self->__empty_handler_t;
+
+This method shall be called when C<cmd_t> is called and the stack is empty;
+by default it does nothing.
+
+=back
 
 =item C<cmd_m($self)>
 
     $self->cmd_m;
 
 Push a value in the register unless empty.
+If the register is empty nothing is done.
 
 =item C<cmd_d($self)>
 
@@ -558,6 +592,49 @@ Else do arithmetic operation; pop top two items as arithmetic operands,
 then push the arithmetic result.
 
 Depends on C<__add>, C<__sub>, C<__mul>, C<__div>, C<__mod>.
+
+=over
+
+=item C<__add($self, $x, $y)>
+
+=item C<__sub($self, $x, $y)>
+
+=item C<__mul($self, $x, $y)>
+
+=item C<__div($self, $x, $y)>
+
+=item C<__mod($self, $x, $y)>
+
+    my $result = $self->__add($self, $x, $y); # or __sub, __mul, __div, __mod
+
+Arithmetic methods.
+The C<$x> integer shall always be the first operand.
+
+THe user can override these methods to deal with overflow, underflow, and/or zero division;
+none of they are handled by default.
+
+=back
+
+=back
+
+=head2 OTHER METHODS
+
+=over
+
+=item C<__int($self, $x)>
+
+    $x = $self->__int($x);
+
+Given C<$x> as either a string or a real number,
+convert and return user-defined integer type.
+
+It's C<int($x)> by default.
+
+=item C<Push($self, @items)>
+
+    $self->(1,2,3);
+
+Equivalent to C<<push @{ $self->{stack} }, @items>>.
 
 =back
 
